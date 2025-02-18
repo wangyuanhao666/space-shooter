@@ -402,8 +402,22 @@
             enemy.speed = 2 + Math.random() * 2;
             enemies.push(enemy);
         }
-        
         // 4. 修复碰撞检测函数
+        // 1. 添加绘制子弹和敌人的函数
+        function drawBullets() {
+            ctx.fillStyle = '#fff';
+            bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x - 2 * bullet.size, bullet.y, 4 * bullet.size, 8 * bullet.size);
+            });
+        }
+        
+        function drawEnemies() {
+            ctx.fillStyle = '#ff0000';
+            enemies.forEach(enemy => {
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            });
+        }
+        // 2. 修复 checkCollisions 函数，合并碰撞检测逻辑
         function checkCollisions() {
             // 子弹与敌人碰撞
             for (let i = bullets.length - 1; i >= 0; i--) {
