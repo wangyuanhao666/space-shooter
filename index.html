@@ -106,7 +106,6 @@
             <li>躲避敌人：保持生命值</li>
         </ul>
     </div>
-    // 修改 gameInfo div，添加 id="soundToggle"
     <div id="gameInfo">
         <span>生命值: <span id="health">100</span></span>
         <span style="margin-left: 20px;">分数: <span id="score">0</span></span>
@@ -198,24 +197,41 @@
         };
         let isGameStarted = false;
         let isPaused = false;
-        
         const player = {
             x: canvas.width / 2,
             y: canvas.height - 50,
             width: 50,
             height: 50,
-            speed: 5,
+            speed: 8, // 提高速度
             weapon: 'normal',
             bulletSize: 1,
             fireRate: 1,
             lastFireTime: 0,
             powerupTimer: 0
         };
-        
+        function drawPlayer() {
+            ctx.fillStyle = '#0ff';
+            // 绘制飞机主体
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y - player.height / 2);
+            ctx.lineTo(player.x - player.width / 2, player.y + player.height / 2);
+            ctx.lineTo(player.x + player.width / 2, player.y + player.height / 2);
+            ctx.closePath();
+            ctx.fill();
+            
+            // 绘制机翼
+            ctx.fillStyle = '#00cccc';
+            ctx.beginPath();
+            ctx.moveTo(player.x - player.width / 3, player.y);
+            ctx.lineTo(player.x - player.width / 2, player.y + player.height / 3);
+            ctx.lineTo(player.x + player.width / 2, player.y + player.height / 3);
+            ctx.lineTo(player.x + player.width / 3, player.y);
+            ctx.closePath();
+            ctx.fill();
+        }
         let bullets = [];
         let enemies = [];
         let powerups = [];
-        
         const weaponTypes = ['normal', 'spread'];
         const powerupTypes = ['weapon', 'size', 'speed'];
         // 在 weaponTypes 定义后添加以下函数
@@ -237,65 +253,68 @@
                 ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
             });
         }
-        
-        function spawnEnemy() {
-            const enemy = enemyPool.get();
-            enemy.x = Math.random() * (canvas.width - enemy.width);
-            enemy.y = -enemy.height;
-            enemy.speed = 2 + Math.random() * 2;
-            enemies.push(enemy);
-        }
-        
-        function drawGame() {
-            drawPlayer();
-            drawBullets();
-            drawEnemies();
-            drawPowerups();
-        }
-        
-        function drawStartScreen() {
-            ctx.fillStyle = '#fff';
-            ctx.font = '30px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('点击"开始游戏"按钮开始', canvas.width / 2, canvas.height / 2);
-        }
-        
-        function drawGameOverScreen() {
-            ctx.fillStyle = '#fff';
-            ctx.font = '30px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('游戏结束', canvas.width / 2, canvas.height / 2 - 30);
-            ctx.fillText(`得分: ${gameState.score}`, canvas.width / 2, canvas.height / 2 + 20);
-        }
-        
-        // 添加事件监听
-        document.addEventListener('keydown', e => {
-            if (e.key === 'ArrowLeft') {
-                player.x = Math.max(player.width / 2, player.x - player.speed);
-            } else if (e.key === 'ArrowRight') {
-                player.x = Math.min(canvas.width - player.width / 2, player.x + player.speed);
-            } else if (e.key === ' ') {
-                shoot();
-            }
-        });
-        
-        // 添加按钮事件监听
-        // 修改开始游戏按钮的事件处理
-        document.getElementById('startBtn').addEventListener('click', () => {
+        document.getElementById('restartBtn').addEventListener('click', () => {
+            // 重置游戏状态
             isGameStarted = true;
+            isPaused = false;
             gameState.gameOver = false;
             gameState.score = 0;
             gameState.health = 100;
             gameState.level = 1;
+            
+            // 清空所有数组
             bullets = [];
             enemies = [];
             powerups = [];
+            
+            // 重置玩家位置和属性
             player.x = canvas.width / 2;
             player.y = canvas.height - 50;
+            player.weapon = 'normal';
+            player.bulletSize = 1;
+            player.fireRate = 1;
+            
+            // 重置按钮文本
+            document.getElementById('pauseBtn').textContent = '暂停';
             
             // 开始生成敌人
             spawnEnemy();
         });
+        function checkCollisions() {
+            // 子弹与敌人碰撞
+            bullets.forEach((bullet, bulletIndex) => {
+                enemies.forEach((enemy, enemyIndex) => {
+                    if (bullet.x >= enemy.x && 
+                        bullet.x <= enemy.x + enemy.width &&
+                        bullet.y >= enemy.y && 
+                        bullet.y <= enemy.y + enemy.height) {
+                        bullets.splice(bulletIndex, 1);
+                        enemies.splice(enemyIndex, 1);
+                        gameState.score += 10;
+                        AudioManager.play('explosion');
+                    }
+                });
+            });
+        }
+        document.getElementById('pauseBtn').addEventListener('click', () => {
+            if (!isGameStarted || gameState.gameOver) return;
+            isPaused = !isPaused;
+            document.getElementById('pauseBtn').textContent = isPaused ? '继续' : '暂停';
+        });
+        // 玩家与敌人碰撞
+        enemies.forEach((enemy, index) => {
+            if (player.x + player.width / 2 > enemy.x &&
+                player.x - player.width / 2 < enemy.x + enemy.width &&
+                player.y + player.height / 2 > enemy.y &&
+                player.y - player.height / 2 < enemy.y + enemy.height) {
+                enemies.splice(index, 1);
+                gameState.health -= 20;
+                if (gameState.health <= 0) {
+                    gameState.gameOver = true;
+                }
+            }
+        });
+        }
         
         // 修改 update 函数中的敌人生成逻辑
         function update(timestamp) {
@@ -335,8 +354,10 @@
                 powerup.y += 2 * (gameState.deltaTime / 16);
                 return powerup.y < canvas.height;
             });
+            
             // 检测碰撞
             checkCollisions();
+            
             // 更新UI
             updateUI();
         }
@@ -386,49 +407,23 @@
                 bullets.push(bullet);
             }
         }
-        // 添加碰撞检测函数
-        function checkCollisions() {
-            // 子弹与敌人碰撞
-            bullets.forEach((bullet, bulletIndex) => {
-                enemies.forEach((enemy, enemyIndex) => {
-                    if (bullet.x >= enemy.x && 
-                        bullet.x <= enemy.x + enemy.width &&
-                        bullet.y >= enemy.y && 
-                        bullet.y <= enemy.y + enemy.height) {
-                        bullets.splice(bulletIndex, 1);
-                        enemies.splice(enemyIndex, 1);
-                        gameState.score += 10;
-                        AudioManager.play('explosion');
-                    }
-                });
-            });
-        
-            // 玩家与敌人碰撞
-            enemies.forEach((enemy, index) => {
-                if (player.x + player.width / 2 > enemy.x &&
-                    player.x - player.width / 2 < enemy.x + enemy.width &&
-                    player.y + player.height / 2 > enemy.y &&
-                    player.y - player.height / 2 < enemy.y + enemy.height) {
-                    enemies.splice(index, 1);
-                    gameState.health -= 20;
-                    if (gameState.health <= 0) {
-                        gameState.gameOver = true;
-                    }
-                }
-            });
-        }
-        // 修改 gameLoop 函数
         function gameLoop(timestamp) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
+            // 绘制背景
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drawPlayer();
+            drawBullets();
+            drawEnemies();
+            drawPowerups();
             if (!isGameStarted) {
                 drawStartScreen();
             } else if (gameState.gameOver) {
                 drawGameOverScreen();
-            } else if (isPaused) {
-                drawGame(); // 即使暂停也要绘制当前状态
             } else {
-                update(timestamp);
+                if (!isPaused) {
+                    update(timestamp);
+                }
                 drawGame();
             }
             
