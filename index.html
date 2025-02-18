@@ -236,46 +236,71 @@
         const powerupTypes = ['weapon', 'size', 'speed'];
         // 在 weaponTypes 定义后添加以下函数
         // 1. 添加开始游戏按钮事件监听器
+        // 1. 修改开始游戏按钮事件
         document.getElementById('startBtn').addEventListener('click', () => {
             isGameStarted = true;
             gameState.gameOver = false;
-            // 开始生成敌人
-            spawnEnemy();
+            gameState.health = 100;
+            gameState.score = 0;
+            gameState.level = 1;
+            
+            // 重置玩家位置
+            player.x = canvas.width / 2;
+            player.y = canvas.height - 50;
+            
+            // 清空数组
+            bullets = [];
+            enemies = [];
+            powerups = [];
         });
+        // 2. 添加键盘控制
+        document.addEventListener('keydown', (e) => {
+            if (!isGameStarted || gameState.gameOver || isPaused) return;
+            
+            switch(e.key) {
+                case 'ArrowLeft':
+                    player.x = Math.max(player.width / 2, player.x - player.speed);
+                    break;
+                case 'ArrowRight':
+                    player.x = Math.min(canvas.width - player.width / 2, player.x + player.speed);
+                    break;
+                case ' ':
+                    shoot();
+                    break;
+            }
+        });
+        // 3. 修复 checkCollisions 函数，删除重复定义
         function checkCollisions() {
             // 子弹与敌人碰撞
-            bullets.forEach((bullet, bulletIndex) => {
-                enemies.forEach((enemy, enemyIndex) => {
-                    if (bullet.x >= enemy.x && 
-                        bullet.x <= enemy.x + enemy.width &&
-                        bullet.y >= enemy.y && 
-                        bullet.y <= enemy.y + enemy.height) {
-                        bullets.splice(bulletIndex, 1);
-                        enemies.splice(enemyIndex, 1);
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    if (bullets[i] && enemies[j] &&
+                        bullets[i].x >= enemies[j].x && 
+                        bullets[i].x <= enemies[j].x + enemies[j].width &&
+                        bullets[i].y >= enemies[j].y && 
+                        bullets[i].y <= enemies[j].y + enemies[j].height) {
+                        bullets.splice(i, 1);
+                        enemies.splice(j, 1);
                         gameState.score += 10;
                         AudioManager.play('explosion');
+                        break;
                     }
-                });
-            });
+                }
+            }
         }
-        document.getElementById('pauseBtn').addEventListener('click', () => {
-            if (!isGameStarted || gameState.gameOver) return;
-            isPaused = !isPaused;
-            document.getElementById('pauseBtn').textContent = isPaused ? '继续' : '暂停';
-        });
         // 玩家与敌人碰撞
-        enemies.forEach((enemy, index) => {
-            if (player.x + player.width / 2 > enemy.x &&
-                player.x - player.width / 2 < enemy.x + enemy.width &&
-                player.y + player.height / 2 > enemy.y &&
-                player.y - player.height / 2 < enemy.y + enemy.height) {
-                enemies.splice(index, 1);
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            if (player.x + player.width / 2 > enemies[i].x &&
+                player.x - player.width / 2 < enemies[i].x + enemies[i].width &&
+                player.y + player.height / 2 > enemies[i].y &&
+                player.y - player.height / 2 < enemies[i].y + enemies[i].height) {
+                enemies.splice(i, 1);
                 gameState.health -= 20;
                 if (gameState.health <= 0) {
                     gameState.gameOver = true;
                 }
             }
-        });
+        }
         }
         
         // 修改 update 函数中的敌人生成逻辑
