@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>太空射击游戏</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        canvas {
+            border: 2px solid #0ff;
+            background-color: #000;
+            box-shadow: 0 0 20px #0ff;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #gameInfo {
+            margin: 10px;
+            font-size: 20px;
+        }
+        .controls {
+            margin: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 0 5px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0052a3;
+        }
+        #gameInstructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #0ff;
+            color: white;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .mobile-controls {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            z-index: 100;
+        }
+        .mobile-controls button {
+            width: 60px;
+            height: 60px;
+            margin: 0 10px;
+            border-radius: 50%;
+            background: rgba(0, 102, 204, 0.7);
+            border: 2px solid #0ff;
+            color: white;
+            font-size: 24px;
+            padding: 0;
+        }
+        .shoot-btn {
+            background: rgba(255, 69, 0, 0.7) !important;
+        }
+        @media (max-width: 800px) {
+            canvas {
+                width: 100%;
+                height: auto;
+            }
+            .mobile-controls {
+                display: block;
+            }
+            #gameInstructions {
+                display: none;
+            }
+            .controls {
+                margin-bottom: 100px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameInstructions">
+        <h3>游戏操作说明：</h3>
+        <ul>
+            <li>← → 方向键：控制飞船左右移动</li>
+            <li>空格键：发射子弹</li>
+            <li>金色道具：获得特殊武器</li>
+            <li>粉色道具：获得大子弹</li>
+            <li>黄色道具：提升射速</li>
+            <li>击中敌人：获得分数</li>
+            <li>躲避敌人：保持生命值</li>
+        </ul>
+    </div>
+    <div id="gameInfo">
+        <span>生命值: <span id="health">100</span></span>
+        <span style="margin-left: 20px;">分数: <span id="score">0</span></span>
+        <span style="margin-left: 20px;">关卡: <span id="level">1</span></span>
+        <span style="margin-left: 20px;">🔊</span>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div class="controls">
+        <button id="startBtn">开始游戏</button>
+        <button id="pauseBtn">暂停</button>
+        <button id="restartBtn">重新开始</button>
+    </div>
+    <div class="mobile-controls">
+        <button id="leftBtn">←</button>
+        <button id="shootBtn" class="shoot-btn">●</button>
+        <button id="rightBtn">→</button>
+    </div>
+	    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        // 音频管理器
+        const AudioManager = {
+            muted: false,
+            sounds: {
+                shoot: new Audio('static/shoot.mp3'),
+                explosion: new Audio('static/explosion.mp3'),
+                powerup: new Audio('static/powerup.mp3')
+            },
+            init() {
+                // 预加载音效并处理错误
+                Object.values(this.sounds).forEach(sound => {
+                    sound.load();
+                    sound.volume = 0.3;
+                    sound.addEventListener('error', () => {
+                        console.warn('音频加载失败:', sound.src);
+                    });
+                });
+                
+                // 音频开关控制
+                document.getElementById('soundToggle').addEventListener('click', () => {
+                    this.muted = !this.muted;
+                    document.getElementById('soundToggle').textContent = this.muted ? '🔇' : '🔊';
+                });
+            },
+            play(soundName) {
+                if (this.muted) return;
+                // 克隆音频节点以支持重叠播放
+                const sound = this.sounds[soundName].cloneNode();
+                sound.play().catch(e => console.warn('音频播放失败:', e));
+            }
+        };
+        // 游戏配置
+        const GameConfig = {
+            maxEnemies: 20,
+            maxBullets: 50,
+            difficultyIncrease: 0.1,
+            levelUpScore: 500,
+            highScore: parseInt(localStorage.getItem('highScore')) || 0
+        };
+        // 性能优化：对象池
+        class ObjectPool {
+            constructor(createFn) {
+                this.pool = [];
+                this.createFn = createFn;
+            }
+            
+            get() {
+                return this.pool.pop() || this.createFn();
+            }
+            
+            release(obj) {
+                if (this.pool.length < 100) { // 限制池大小
+                    this.pool.push(obj);
+                }
+            }
+        }
+        // 创建对象池
+        const bulletPool = new ObjectPool(() => ({ x: 0, y: 0, type: 'normal', size: 1 }));
+        const enemyPool = new ObjectPool(() => ({ x: 0, y: 0, width: 40, height: 40, speed: 2 }));
+        // 更新 gameState
+        const gameState = {
+            score: 0,
+            level: 1,
+            health: 100,
+            gameOver: false,
+            show520Heart: false,
+            heartShown: false,
+            resumeFromHeart: false
+        };
+        let isGameStarted = false;
+        let isPaused = false;
+        
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height - 50,
+            width: 50,
+            height: 50,
+            speed: 5,
+            weapon: 'normal',
+            bulletSize: 1,
+            fireRate: 1,
+            lastFireTime: 0,
+            powerupTimer: 0
+        };
+        
+        let bullets = [];
+        let enemies = [];
+        let powerups = [];
+        
+        const weaponTypes = ['normal', 'spread'];
+        const powerupTypes = ['weapon', 'size', 'speed'];
+        function drawPlayer() { /* ... */ }
+        function drawBullets() { /* ... */ }
+        function drawEnemies() { /* ... */ }
+        function drawPowerups() { /* ... */ }
+        function drawHeart() { /* ... */ }
+        function update() { /* ... */ }
+        function update(timestamp) {
+            // 计算帧间隔
+            gameState.deltaTime = timestamp - (gameState.lastTime || timestamp);
+            gameState.lastTime = timestamp;
+            
+            // 更新游戏难度
+            if (gameState.score > 0 && gameState.score % GameConfig.levelUpScore === 0) {
+                gameState.level = Math.floor(gameState.score / GameConfig.levelUpScore) + 1;
+            }
+            
+            // 生成敌人
+            if (enemies.length < GameConfig.maxEnemies * (1 + gameState.level * GameConfig.difficultyIncrease)) {
+                if (Math.random() < 0.02 + (gameState.level * 0.005)) {
+                    spawnEnemy();
+                }
+            }
+            
+            // 更新子弹位置
+            bullets = bullets.filter(bullet => {
+                bullet.y -= 7 * (gameState.deltaTime / 16);
+                if (bullet.angle !== undefined) {
+                    bullet.x += Math.sin(bullet.angle) * 7 * (gameState.deltaTime / 16);
+                }
+                return bullet.y > 0;
+            });
+            
+            // 更新敌人位置
+            enemies = enemies.filter(enemy => {
+                enemy.y += enemy.speed * (gameState.deltaTime / 16);
+                return enemy.y < canvas.height;
+            });
+            
+            // 更新道具
+            powerups = powerups.filter(powerup => {
+                powerup.y += 2 * (gameState.deltaTime / 16);
+                return powerup.y < canvas.height;
+            });
+            
+            // 检测碰撞
+            checkCollisions();
+            
+            // 更新UI
+            updateUI();
+        }
+        function updateUI() {
+            document.getElementById('health').textContent = gameState.health;
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('level').textContent = gameState.level;
+            
+            // 更新最高分
+            if (gameState.score > gameState.highScore) {
+                gameState.highScore = gameState.score;
+                localStorage.setItem('highScore', gameState.highScore);
+            }
+        }
+        function shoot() {
+            if (!isGameStarted || gameState.gameOver || isPaused) return;
+            if (bullets.length >= GameConfig.maxBullets) return;
+            
+            const now = Date.now();
+            const fireDelay = 250 / player.fireRate;
+            
+            if (now - player.lastFireTime < fireDelay) return;
+            
+            player.lastFireTime = now;
+            AudioManager.play('shoot');
+            
+            if (player.weapon === 'spread') {
+                [-0.2, 0, 0.2].forEach(angle => {
+                    const bullet = bulletPool.get();
+                    Object.assign(bullet, {
+                        x: player.x,
+                        y: player.y,
+                        type: 'spread',
+                        size: player.bulletSize,
+                        angle
+                    });
+                    bullets.push(bullet);
+                });
+            } else {
+                const bullet = bulletPool.get();
+                Object.assign(bullet, {
+                    x: player.x,
+                    y: player.y,
+                    type: player.weapon,
+                    size: player.bulletSize
+                });
+                bullets.push(bullet);
+            }
+        }
+        function gameLoop(timestamp) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (!isGameStarted) {
+                drawStartScreen();
+            } else if (gameState.gameOver) {
+                drawGameOverScreen();
+            } else {
+                if (!isPaused) {
+                    update(timestamp);
+                }
+                drawGame();
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        // 添加屏幕方向锁定
+        if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('portrait').catch(() => {
+                console.warn('屏幕方向锁定失败');
+            });
+        }
+        // 初始化音频管理器
+        AudioManager.init();
+        // 启动游戏循环
+        gameLoop();
+    </script>
+</body>
+</html>
