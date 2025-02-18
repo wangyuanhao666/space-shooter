@@ -369,24 +369,182 @@
                 bullets.push(bullet);
             }
         }
-        function gameLoop(timestamp) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // 1. 添加开始和结束屏幕
+        function drawStartScreen() {
+            ctx.fillStyle = '#fff';
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('点击开始游戏按钮开始', canvas.width / 2, canvas.height / 2);
+        }
+        
+        function drawGameOverScreen() {
+            ctx.fillStyle = '#fff';
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('游戏结束', canvas.width / 2, canvas.height / 2);
+            ctx.fillText('得分: ' + gameState.score, canvas.width / 2, canvas.height / 2 + 40);
+        }
+        
+        // 2. 修改 drawGame 函数
+        function drawGame() {
             // 绘制背景
             ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            drawPlayer();
-            drawBullets();
-            drawEnemies();
-            drawPowerups();
+        }
+        
+        // 3. 修复 spawnEnemy 函数
+        function spawnEnemy() {
+            if (!isGameStarted || gameState.gameOver || isPaused) return;
+            
+            const enemy = enemyPool.get();
+            enemy.x = Math.random() * (canvas.width - enemy.width);
+            enemy.y = -enemy.height;
+            enemy.speed = 2 + Math.random() * 2;
+            enemies.push(enemy);
+        }
+        
+        // 4. 修复碰撞检测函数
+        function checkCollisions() {
+            // 子弹与敌人碰撞
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    if (bullets[i] && enemies[j] &&
+                        bullets[i].x >= enemies[j].x && 
+                        bullets[i].x <= enemies[j].x + enemies[j].width &&
+                        bullets[i].y >= enemies[j].y && 
+                        bullets[i].y <= enemies[j].y + enemies[j].height) {
+                        bullets.splice(i, 1);
+                        enemies.splice(j, 1);
+                        gameState.score += 10;
+                        AudioManager.play('explosion');
+                        break;
+                    }
+                }
+            }
+        }
+        // 玩家与敌人碰撞
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            if (player.x + player.width / 2 > enemies[i].x &&
+                player.x - player.width / 2 < enemies[i].x + enemies[i].width &&
+                player.y + player.height / 2 > enemies[i].y &&
+                player.y - player.height / 2 < enemies[i].y + enemies[i].height) {
+                enemies.splice(i, 1);
+                gameState.health -= 20;
+                if (gameState.health <= 0) {
+                    gameState.gameOver = true;
+                }
+            }
+        }
+        }
+        
+        // 修改 update 函数中的敌人生成逻辑
+        function update(timestamp) {
+            // 计算帧间隔
+            gameState.deltaTime = timestamp - (gameState.lastTime || timestamp);
+            gameState.lastTime = timestamp;
+            
+            // 更新游戏难度
+            if (gameState.score > 0 && gameState.score % GameConfig.levelUpScore === 0) {
+                gameState.level = Math.floor(gameState.score / GameConfig.levelUpScore) + 1;
+            }
+            
+            // 生成敌人
+            if (enemies.length < GameConfig.maxEnemies * (1 + gameState.level * GameConfig.difficultyIncrease)) {
+                if (Math.random() < 0.02 + (gameState.level * 0.005)) {
+                    spawnEnemy();
+                }
+            }
+            
+            // 更新子弹位置
+            bullets = bullets.filter(bullet => {
+                bullet.y -= 7 * (gameState.deltaTime / 16);
+                if (bullet.angle !== undefined) {
+                    bullet.x += Math.sin(bullet.angle) * 7 * (gameState.deltaTime / 16);
+                }
+                return bullet.y > 0;
+            });
+            
+            // 更新敌人位置
+            enemies = enemies.filter(enemy => {
+                enemy.y += enemy.speed * (gameState.deltaTime / 16);
+                return enemy.y < canvas.height;
+            });
+            
+            // 更新道具
+            powerups = powerups.filter(powerup => {
+                powerup.y += 2 * (gameState.deltaTime / 16);
+                return powerup.y < canvas.height;
+            });
+            
+            // 检测碰撞
+            checkCollisions();
+            
+            // 更新UI
+            updateUI();
+        }
+        function updateUI() {
+            document.getElementById('health').textContent = gameState.health;
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('level').textContent = gameState.level;
+            
+            // 更新最高分
+            if (gameState.score > gameState.highScore) {
+                gameState.highScore = gameState.score;
+                localStorage.setItem('highScore', gameState.highScore);
+            }
+        }
+        function shoot() {
+            if (!isGameStarted || gameState.gameOver || isPaused) return;
+            if (bullets.length >= GameConfig.maxBullets) return;
+            
+            const now = Date.now();
+            const fireDelay = 250 / player.fireRate;
+            
+            if (now - player.lastFireTime < fireDelay) return;
+            
+            player.lastFireTime = now;
+            AudioManager.play('shoot');
+            
+            if (player.weapon === 'spread') {
+                [-0.2, 0, 0.2].forEach(angle => {
+                    const bullet = bulletPool.get();
+                    Object.assign(bullet, {
+                        x: player.x,
+                        y: player.y,
+                        type: 'spread',
+                        size: player.bulletSize,
+                        angle
+                    });
+                    bullets.push(bullet);
+                });
+            } else {
+                const bullet = bulletPool.get();
+                Object.assign(bullet, {
+                    x: player.x,
+                    y: player.y,
+                    type: player.weapon,
+                    size: player.bulletSize
+                });
+                bullets.push(bullet);
+            }
+        }
+        function gameLoop(timestamp) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
             if (!isGameStarted) {
                 drawStartScreen();
             } else if (gameState.gameOver) {
                 drawGameOverScreen();
             } else {
+                drawGame();
+                drawPlayer();
+                drawBullets();
+                drawEnemies();
+                drawPowerups();
+                
                 if (!isPaused) {
                     update(timestamp);
                 }
-                drawGame();
             }
             
             requestAnimationFrame(gameLoop);
