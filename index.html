@@ -235,48 +235,10 @@
         const weaponTypes = ['normal', 'spread'];
         const powerupTypes = ['weapon', 'size', 'speed'];
         // 在 weaponTypes 定义后添加以下函数
-        function drawPlayer() {
-            ctx.fillStyle = '#0ff';
-            ctx.fillRect(player.x - player.width / 2, player.y - player.height / 2, player.width, player.height);
-        }
-        
-        function drawBullets() {
-            ctx.fillStyle = '#fff';
-            bullets.forEach(bullet => {
-                ctx.fillRect(bullet.x - 2 * bullet.size, bullet.y, 4 * bullet.size, 8 * bullet.size);
-            });
-        }
-        
-        function drawEnemies() {
-            ctx.fillStyle = '#f00';
-            enemies.forEach(enemy => {
-                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
-            });
-        }
-        document.getElementById('restartBtn').addEventListener('click', () => {
-            // 重置游戏状态
+        // 1. 添加开始游戏按钮事件监听器
+        document.getElementById('startBtn').addEventListener('click', () => {
             isGameStarted = true;
-            isPaused = false;
             gameState.gameOver = false;
-            gameState.score = 0;
-            gameState.health = 100;
-            gameState.level = 1;
-            
-            // 清空所有数组
-            bullets = [];
-            enemies = [];
-            powerups = [];
-            
-            // 重置玩家位置和属性
-            player.x = canvas.width / 2;
-            player.y = canvas.height - 50;
-            player.weapon = 'normal';
-            player.bulletSize = 1;
-            player.fireRate = 1;
-            
-            // 重置按钮文本
-            document.getElementById('pauseBtn').textContent = '暂停';
-            
             // 开始生成敌人
             spawnEnemy();
         });
