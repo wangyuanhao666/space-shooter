@@ -106,11 +106,12 @@
             <li>躲避敌人：保持生命值</li>
         </ul>
     </div>
+    // 修改 gameInfo div，添加 id="soundToggle"
     <div id="gameInfo">
         <span>生命值: <span id="health">100</span></span>
         <span style="margin-left: 20px;">分数: <span id="score">0</span></span>
         <span style="margin-left: 20px;">关卡: <span id="level">1</span></span>
-        <span style="margin-left: 20px;">🔊</span>
+        <span id="soundToggle" style="margin-left: 20px; cursor: pointer;">🔊</span>
     </div>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
     <div class="controls">
@@ -279,20 +280,8 @@
         });
         
         // 添加按钮事件监听
+        // 修改开始游戏按钮的事件处理
         document.getElementById('startBtn').addEventListener('click', () => {
-            isGameStarted = true;
-            gameState.gameOver = false;
-            gameState.score = 0;
-            gameState.health = 100;
-            gameState.level = 1;
-        });
-        
-        document.getElementById('pauseBtn').addEventListener('click', () => {
-            isPaused = !isPaused;
-            document.getElementById('pauseBtn').textContent = isPaused ? '继续' : '暂停';
-        });
-        
-        document.getElementById('restartBtn').addEventListener('click', () => {
             isGameStarted = true;
             gameState.gameOver = false;
             gameState.score = 0;
@@ -303,39 +292,12 @@
             powerups = [];
             player.x = canvas.width / 2;
             player.y = canvas.height - 50;
+            
+            // 开始生成敌人
+            spawnEnemy();
         });
         
-        // 添加碰撞检测
-        function checkCollisions() {
-            // 子弹与敌人碰撞
-            bullets.forEach((bullet, bulletIndex) => {
-                enemies.forEach((enemy, enemyIndex) => {
-                    if (bullet.x >= enemy.x && 
-                        bullet.x <= enemy.x + enemy.width &&
-                        bullet.y >= enemy.y && 
-                        bullet.y <= enemy.y + enemy.height) {
-                        bullets.splice(bulletIndex, 1);
-                        enemies.splice(enemyIndex, 1);
-                        gameState.score += 10;
-                        AudioManager.play('explosion');
-                    }
-                });
-            });
-        
-            // 玩家与敌人碰撞
-            enemies.forEach((enemy, index) => {
-                if (player.x + player.width / 2 > enemy.x &&
-                    player.x - player.width / 2 < enemy.x + enemy.width &&
-                    player.y + player.height / 2 > enemy.y &&
-                    player.y - player.height / 2 < enemy.y + enemy.height) {
-                    enemies.splice(index, 1);
-                    gameState.health -= 20;                    if (gameState.health <= 0) {
-                        gameState.gameOver = true;
-                    }
-                }
-            });
-        }
-        function update() { /* ... */ }
+        // 修改 update 函数中的敌人生成逻辑
         function update(timestamp) {
             // 计算帧间隔
             gameState.deltaTime = timestamp - (gameState.lastTime || timestamp);
