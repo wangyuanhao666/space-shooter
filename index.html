@@ -244,14 +244,14 @@
             gameState.score = 0;
             gameState.level = 1;
             
-            // 重置玩家位置
+            // 重置玩家位置和属性
             player.x = canvas.width / 2;
             player.y = canvas.height - 50;
-            
-            // 清空数组
-            bullets = [];
-            enemies = [];
-            powerups = [];
+            player.weapon = 'normal';
+            player.bulletSize = 1;
+            player.fireRate = 1;
+            player.lastFireTime = 0;
+            powerupTimer = 0;
         });
         // 2. 添加键盘控制
         document.addEventListener('keydown', (e) => {
